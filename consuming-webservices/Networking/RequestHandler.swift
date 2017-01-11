@@ -45,44 +45,30 @@ struct HTTPRequestHandler: RequestHandler {
     var body: Any?
     
     func execute( callback: @escaping (Result<Any>) -> Void) {
-        guard let url = URL(string: path) else {
-            callback(.failure(RequestError.invalidURL))
-            return
-        }
+        
+        guard let url = URL(string: path) else { return }
         
         var request = URLRequest(url: url)
         request.httpMethod = method.rawValue
         
-        if let headers = headers {
-            for (key, value) in headers {
-                request.addValue(value, forHTTPHeaderField: key)
-            }
-        }
-        
-        if let body = body {
+        if request.httpMethod == "POST" {
+            
+            request.addValue(self.headers!.values.first!, forHTTPHeaderField: self.headers!.keys.first!)
+            
             do {
-                request.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
-            } catch (let e) {
-                callback(.failure(e))
+                request.httpBody = try JSONSerialization.data(withJSONObject: self.body!, options: [])
+                
+            } catch let error {
+                print(error.localizedDescription)
             }
         }
         
-        let task = URLSession.shared.dataTask(with: request) { data, response, error in
+        let task = URLSession.shared.dataTask(with: request) { (data, response, error) in
+            
             if let error = error {
                 callback(.failure(error))
                 return
             }
-            
-            guard let response = response as? HTTPURLResponse else {
-                callback(.failure(RequestError.noResponse))
-                return
-            }
-            
-            guard response.statusCode < 400 else {
-                callback(.failure(RequestError.httpResponse(response.statusCode)))
-                return
-            }
-            
             guard let data = data else {
                 callback(.failure(RequestError.noData))
                 return
@@ -91,13 +77,16 @@ struct HTTPRequestHandler: RequestHandler {
             do {
                 let json = try JSONSerialization.jsonObject(with: data, options: [])
                 if let str = String(data: data, encoding: String.Encoding.utf8) {
+                    print("Received data: \(str)")
                     print("Received response: \(str)")
                 }
                 callback(.success(json))
             } catch (let e) {
                 callback(.failure(e))
             }
+            
         }
         task.resume()
+        
     }
 }
